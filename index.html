@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>School After Dark</title>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      background: #0b0b12;
+      display: grid;
+      place-items: center;
+      height: 100vh;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+    canvas {
+      border: 2px solid #2a2a3a;
+      box-shadow: 0 0 30px rgba(0,0,0,0.6);
+    }
+  </style>
+</head>
+<body>
+<script>
+let player;
+let clues = [];
+let shadows = [];
+let walls = [];
+let exitDoor;
+let state = "playing";
+let collectedClues = 0;
+let message = "Collect 3 clues and escape the school.";
+
+function setup() {
+  createCanvas(960, 600);
+
+  resetGame();
+}
+
+function resetGame() {
+  player = {
+    x: 80,
+    y: 500,
+    r: 14,
+    speed: 2.5
+  };
+
+  clues = [
+    { x: 120, y: 160, r: 10, collected: false },
+    { x: 820, y: 150, r: 10, collected: false },
+    { x: 650, y: 500, r: 10, collected: false }
+  ];
+
+  shadows = [
+    { x: 280, y: 140, r: 15, vx: 1.2, vy: 0, minX: 180, maxX: 420, axis: "x" },
+    { x: 700, y: 300, r: 16, vx: 0, vy: 1.3, minY: 220, maxY: 500, axis: "y" },
+    { x: 500, y: 480, r: 15, vx: 1.4, vy: 0, minX: 420, maxX: 800, axis: "x" }
+  ];
+
+  walls = [
+    { x: 0, y: 0, w: 960, h: 26 },      // top border
+    { x: 0, y: 574, w: 960, h: 26 },    // bottom border
+    { x: 0, y: 0, w: 26, h: 600 },       // left border
+    { x: 934, y: 0, w: 26, h: 600 },     // right border
+
+    { x: 140, y: 70, w: 210, h: 24 },    // left room wall
+    { x: 140, y: 70, w: 24, h: 180 },
+    { x: 140, y: 220, w: 210, h: 24 },
+    { x: 326, y: 70, w: 24, h: 180 },
+
+    { x: 430, y: 100, w: 220, h: 24 },  // center room wall
+    { x: 430, y: 100, w: 24, h: 180 },
+    { x: 430, y: 260, w: 220, h: 24 },
+    { x: 626, y: 100, w: 24, h: 180 },
+
+    { x: 650, y: 330, w: 200, h: 24 },  // right room wall
+    { x: 650, y: 330, w: 24, h: 170 },
+    { x: 650, y: 476, w: 200, h: 24 },
+    { x: 826, y: 330, w: 24, h: 170 },
+
+    { x: 220, y: 390, w: 220, h: 24 },  // lower left room
+    { x: 220, y: 390, w: 24, h: 120 },
+    { x: 220, y: 486, w: 220, h: 24 },
+    { x: 416, y: 390, w: 24, h: 120 },
+
+    { x: 520, y: 390, w: 160, h: 24 },  // lower middle room
+    { x: 520, y: 390, w: 24, h: 120 },
+    { x: 520, y: 486, w: 160, h: 24 },
+    { x: 656, y: 390, w: 24, h: 120 }
+  ];
+
+  exitDoor = { x: 890, y: 520, w: 32, h: 54 };
+
+  collectedClues = 0;
+  state = "playing";
+  message = "Collect 3 clues and escape the school.";
+}
+
+function keyPressed() {
+  if (key === 'r' || key === 'R') {
+    resetGame();
+  }
+}
+
+function draw() {
+  background(15, 16, 24);
+
+  drawBackground();
+  if (state === "playing") {
+    updatePlayer();
+    updateShadows();
+    checkClues();
+    checkExit();
+    checkCollisionWithShadows();
+  }
+
+  drawWalls();
+  drawClues();
+  drawExit();
+  drawShadows();
+  drawPlayer();
+  drawDarkness();
+  drawHUD();
+  drawMessage();
+
+  if (state === "lost") {
+    showEndScreen("The school found you...", "Press R to restart");
+  } else if (state === "won") {
+    showEndScreen("You escaped... for now.", "Press R to play again");
+  }
+}
+
+function drawBackground() {
+  // floor
+  fill(31, 34, 44);
+  rect(0, 0, width, height);
+
+  // chalky hall lines
+  stroke(60, 70, 90);
+  strokeWeight(2);
+  for (let y = 40; y < height; y += 80) {
+    line(0, y, width, y);
+  }
+  for (let x = 40; x < width; x += 90) {
+    line(x, 0, x, height);
+  }
+  noStroke();
+
+  // windows and moon
+  fill(255, 235, 170, 50);
+  rect(50, 40, 150, 80);
+  rect(760, 40, 150, 80);
+
+  fill(255, 234, 160);
+  ellipse(860, 90, 60, 60);
+
+  // lockers
+  for (let x = 60; x < 900; x += 110) {
+    fill(88, 95, 108);
+    rect(x, 120, 40, 90);
+    rect(x + 6, 130, 28, 70);
+  }
+}
+
+function drawWalls() {
+  fill(57, 62, 76);
+  for (const wall of walls) {
+    rect(wall.x, wall.y, wall.w, wall.h);
+  }
+}
+
+function drawClues() {
+  for (const clue of clues) {
+    if (!clue.collected) {
+      fill(255, 215, 90);
+      ellipse(clue.x, clue.y, clue.r * 2, clue.r * 2);
+      fill(0);
+      ellipse(clue.x, clue.y, clue.r, clue.r);
+    }
+  }
+}
+
+function drawExit() {
+  fill(state === "playing" && collectedClues === clues.length ? 90 : 50, 255, 120, 180);
+  rect(exitDoor.x, exitDoor.y, exitDoor.w, exitDoor.h);
+
+  fill(0, 0, 0, 120);
+  rect(exitDoor.x + 10, exitDoor.y + 12, 12, 30);
+}
+
+function drawShadows() {
+  for (const shadow of shadows) {
+    fill(117, 0, 0, 180);
+    ellipse(shadow.x, shadow.y, shadow.r * 2.2, shadow.r * 2.6);
+    fill(200, 40, 40, 220);
+    ellipse(shadow.x, shadow.y, shadow.r * 1.8, shadow.r * 2.1);
+    fill(0, 0, 0, 120);
+    ellipse(shadow.x - 4, shadow.y - 3, 5, 5);
+    ellipse(shadow.x + 4, shadow.y - 3, 5, 5);
+  }
+}
+
+function drawPlayer() {
+  fill(220, 220, 235);
+  ellipse(player.x, player.y, player.r * 2, player.r * 2);
+  fill(40, 40, 55);
+  ellipse(player.x - 4, player.y - 3, 3, 3);
+  ellipse(player.x + 4, player.y - 3, 3, 3);
+  arc(player.x, player.y + 2, 10, 7, 0, PI);
+}
+
+function updatePlayer() {
+  let dx = 0;
+  let dy = 0;
+
+  if (keyIsDown(87) || keyIsDown(UP_ARROW)) dy -= player.speed; // W / ↑
+  if (keyIsDown(83) || keyIsDown(DOWN_ARROW)) dy += player.speed; // S / ↓
+  if (keyIsDown(65) || keyIsDown(LEFT_ARROW)) dx -= player.speed; // A / ←
+  if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) dx += player.speed; // D / →
+
+  moveWithCollision(player, dx, dy);
+}
+
+function moveWithCollision(entity, dx, dy) {
+  entity.x += dx;
+  for (const wall of walls) {
+    if (circleRectCollision(entity.x, entity.y, entity.r, wall)) {
+      entity.x -= dx;
+      break;
+    }
+  }
+
+  entity.y += dy;
+  for (const wall of walls) {
+    if (circleRectCollision(entity.x, entity.y, entity.r, wall)) {
+      entity.y -= dy;
+      break;
+    }
+  }
+}
+
+function circleRectCollision(cx, cy, r, rect) {
+  let closestX = constrain(cx, rect.x, rect.x + rect.w);
+  let closestY = constrain(cy, rect.y, rect.y + rect.h);
+  let dx = cx - closestX;
+  let dy = cy - closestY;
+  return dx * dx + dy * dy < r * r;
+}
+
+function updateShadows() {
+  for (const shadow of shadows) {
+    if (shadow.axis === "x") {
+      shadow.x += shadow.vx;
+      if (shadow.x < shadow.minX || shadow.x > shadow.maxX) {
+        shadow.vx *= -1;
+      }
+    } else {
+      shadow.y += shadow.vy;
+      if (shadow.y < shadow.minY || shadow.y > shadow.maxY) {
+        shadow.vy *= -1;
+      }
+    }
+  }
+}
+
+function checkClues() {
+  for (const clue of clues) {
+    if (!clue.collected && dist(player.x, player.y, clue.x, clue.y) < 24) {
+      clue.collected = true;
+      collectedClues++;
+      message = "Clue found. " + (clues.length - collectedClues) + " left.";
+    }
+  }
+}
+
+function checkExit() {
+  if (collectedClues === clues.length) {
+    let nearExit = rectCircleCollision(exitDoor.x, exitDoor.y, exitDoor.w, exitDoor.h, player.x, player.y, player.r);
+    if (nearExit) {
+      state = "won";
+    }
+  }
+}
+
+function rectCircleCollision(rectX, rectY, rectW, rectH, cx, cy, r) {
+  let closestX = constrain(cx, rectX, rectX + rectW);
+  let closestY = constrain(cy, rectY, rectY + rectH);
+  let dx = cx - closestX;
+  let dy = cy - closestY;
+  return dx * dx + dy * dy < r * r;
+}
+
+function checkCollisionWithShadows() {
+  for (const shadow of shadows) {
+    if (dist(player.x, player.y, shadow.x, shadow.y) < (player.r + shadow.r + 2)) {
+      state = "lost";
+      message = "A shadow caught you!";
+    }
+  }
+}
+
+function drawDarkness() {
+  push();
+  drawingContext.save();
+
+  drawingContext.fillStyle = "rgba(0, 0, 0, 0.72)";
+  drawingContext.fillRect(0, 0, width, height);
+
+  drawingContext.globalCompositeOperation = "destination-out";
+  const gradient = drawingContext.createRadialGradient(
+    player.x, player.y, 10,
+    player.x, player.y, 185
+  );
+  gradient.addColorStop(0, "rgba(255,255,255,1)");
+  gradient.addColorStop(0.55, "rgba(255,255,255,0.85)");
+  gradient.addColorStop(1, "rgba(255,255,255,0)");
+
+  drawingContext.fillStyle = gradient;
+  drawingContext.beginPath();
+  drawingContext.arc(player.x, player.y, 185, 0, Math.PI * 2);
+  drawingContext.fill();
+
+  drawingContext.restore();
+  pop();
+}
+
+function drawHUD() {
+  fill(255, 255, 255, 220);
+  noStroke();
+  textSize(18);
+  text("Clues: " + collectedClues + "/" + clues.length, 20, 28);
+
+  fill(255, 80, 80, 220);
+  textSize(14);
+  text("Objective: find every clue and reach the exit", 20, 50);
+}
+
+function drawMessage() {
+  fill(255, 255, 255, 230);
+  textSize(16);
+  text(message, 20, height - 20);
+}
+
+function showEndScreen(title, subtitle) {
+  fill(0, 0, 0, 160);
+  rect(width/2 - 190, height/2 - 80, 380, 160);
+
+  fill(255, 255, 255);
+  textAlign(CENTER, CENTER);
+  textSize(28);
+  text(title, width/2, height/2 - 10);
+
+  textSize(18);
+  text(subtitle, width/2, height/2 + 30);
+
+  textAlign(LEFT, BASELINE);
+}
+</script>
+</body>
+</html>
